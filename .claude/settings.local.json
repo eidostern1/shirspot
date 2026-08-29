@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell($p = \"C:\\\\Users\\\\eidos\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-eidos-OneDrive-Desktop-sognguessHebrew\\\\5e117fbf-01cb-4961-b88a-7aaf0dac3881\\\\scratchpad\\\\probe.ps1\"; $code = [IO.File]::ReadAllText\\($p, [Text.Encoding]::UTF8\\); $sb = [ScriptBlock]::Create\\(\\(\"`$PSScriptRoot = '\" + \\(Split-Path $p\\) + \"'`r`n\" + $code\\)\\); & $sb)",
-      "PowerShell(foreach\\($c in 'python','py','python3'\\){ $x=Get-Command $c -ErrorAction SilentlyContinue; if\\($x\\){ \"$c -> $\\($x.Source\\)\" } }; \"dotnet: \" + \\(Get-Command dotnet -ErrorAction SilentlyContinue\\).Source)"
-    ]
-  }
-}
