@@ -161,8 +161,28 @@
       n: n,
       p: p,
       nT: n ? n.split(' ') : [],
-      pT: p ? p.split(' ') : []
+      pT: p ? p.split(' ') : [],
+      skel: Heb.skeleton(n),
+      heb: Heb.hasHebrew(n)
     };
+  }
+
+  /* Bridges Hebrew typing to a transliterated Latin title (and vice versa).
+   * Only applies across scripts — within one script the ordinary scoring is
+   * both stronger and safer, and skeletons are lossy enough that comparing
+   * two Hebrew titles by skeleton would over-match. */
+  function crossScriptScore(qv, field) {
+    if (!field || !qv.skel || !field.skel) return 0;
+    if (qv.heb === field.heb) return 0;
+    if (qv.skel.length < 3) return 0;
+    if (qv.skel === field.skel) return 0.93;
+    /* One edit of slack keeps genuine pairs that differ only by a silent ה
+     * ("Rak Elohim Yodea" / "רק אלוהים יודע"), but skeletons are lossy, so
+     * this sits below the substring tier and only surfaces as a last resort. */
+    if (qv.skel.length >= 5 && field.skel.length >= 5 &&
+        editDistance(qv.skel, field.skel, 1) <= 1) return 0.70;
+    if (qv.skel.length >= 4 && field.skel.indexOf(qv.skel) === 0) return 0.80;
+    return 0;
   }
 
   function scoreField(qv, field) {
@@ -181,7 +201,13 @@
   /* ---------- query variants ---------- */
   function makeQuery(text) {
     var n = Heb.norm(text);
-    var qv = { n: n, p: Heb.phonetic(text), layout: null };
+    var qv = {
+      n: n,
+      p: Heb.phonetic(text),
+      layout: null,
+      skel: Heb.skeleton(n),
+      heb: Heb.hasHebrew(n)
+    };
     /* If the user typed pure latin but our data is Hebrew, they may simply
      * have left the keyboard in English. Try the layout-swapped reading. */
     if (n && !Heb.hasHebrew(n) && Heb.hasLatin(n)) {
@@ -215,7 +241,9 @@
     var title = Math.max(
       scoreField(qv, e.title),
       e.titleBare ? scoreField(qv, e.titleBare) : 0,
-      e.titleLat ? scoreField(qv, e.titleLat) * 0.99 : 0
+      e.titleLat ? scoreField(qv, e.titleLat) * 0.99 : 0,
+      crossScriptScore(qv, e.title),
+      e.titleBare ? crossScriptScore(qv, e.titleBare) : 0
     );
     var artist = Math.max(
       scoreField(qv, e.artist),
@@ -308,6 +336,14 @@
       if (qv.n === tn || qv.p === tp) return true;
       if (nearEqual(qv.n, tn) || nearEqual(qv.p, tp)) return true;
       if (qv.layout && (qv.layout === tn || nearEqual(qv.layout, tn))) return true;
+
+      /* Typing "עומד בשער" must win a round whose title we only hold as
+       * "Omed Basha'ar". Cross-script only, and the skeleton has to be long
+       * enough that the match means something. */
+      if (Heb.hasHebrew(tn) !== qv.heb) {
+        var ts = Heb.skeleton(tn);
+        if (ts && qv.skel && qv.skel.length >= 4 && qv.skel === ts) return true;
+      }
     }
     return false;
   }

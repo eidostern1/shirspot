@@ -12,6 +12,18 @@ $cacheDir = Join-Path $PSScriptRoot 'cache'
 $dataDir  = Join-Path $root 'data'
 if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
 
+. (Join-Path $PSScriptRoot 'hebrew-lib.ps1')
+
+# Manual corrections for catalogue metadata errors, keyed by iTunes trackId.
+$overridePath = Join-Path $PSScriptRoot 'title-overrides.json'
+$OVERRIDES = @{}
+if (Test-Path $overridePath) {
+  $ov = [IO.File]::ReadAllText($overridePath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+  foreach ($prop in $ov.PSObject.Properties) {
+    if ($prop.Name -notlike '_*') { $OVERRIDES[$prop.Name] = $prop.Value }
+  }
+}
+
 $MAX_PER_ARTIST = 16
 $THIS_YEAR = 2026
 
@@ -93,6 +105,13 @@ foreach ($f in $files) {
     if (Test-Excluded $r.trackName $r.collectionName) { continue }
 
     $title = Clean-Title $r.trackName
+    # A mixed title carries its own answer: "Ze Hakol O Klum (זה הכל או כלום)"
+    # should display as the Hebrew, not the transliteration.
+    $title = Get-HebrewRun $title
+    # Applied before de-duplication, so a corrected title merges naturally
+    # with the correctly-spelled twin instead of surviving alongside it.
+    $tidKey = [string]$r.trackId
+    if ($OVERRIDES.ContainsKey($tidKey)) { $title = $OVERRIDES[$tidKey] }
     if (-not $title -or $title.Length -gt 55) { continue }
 
     $tn = Normalize-He $title
@@ -146,13 +165,102 @@ foreach ($key in $copies.Keys) {
   [void]$byArtist[$rec.artistHe].Add($rec)
 }
 
+# ------- pass 2b: fold transliterated titles into their Hebrew twin -------
+# Apple often lists the same recording twice: once titled "Omed Basha'ar" and
+# once "עומד בשער". We pair them by consonant skeleton and keep the Hebrew
+# spelling, carrying over the earlier year and better rank from whichever
+# copy had them.
+#
+# Deliberately only Latin -> Hebrew: two Hebrew titles are never merged with
+# each other, so this can't silently collapse two genuinely different songs.
+
+$mergedCount = 0
+$latinKept = 0
+$dupMerged = 0
+
+foreach ($artist in @($byArtist.Keys)) {
+  $list = $byArtist[$artist]
+  $heb = @(); $lat = @()
+  foreach ($r in $list) {
+    if ($r.title -match '[א-ת]') { $heb += $r } else { $lat += $r }
+  }
+  foreach ($h in $heb) {
+    $h | Add-Member -NotePropertyName skel -NotePropertyValue (Get-HebSkeleton $h.title) -Force
+  }
+
+  $keep = New-Object System.Collections.ArrayList
+  foreach ($h in $heb) { [void]$keep.Add($h) }
+
+  foreach ($l in $lat) {
+    $ls = Get-LatSkeleton $l.title
+    $match = $null
+    if ($ls.Length -ge 4) {
+      foreach ($h in $heb) { if ($h.skel -ceq $ls) { $match = $h; break } }
+      # one edit of slack covers ה/h and similar spelling drift, and still
+      # leaves clear daylight: the nearest non-matching pair measured 3
+      if (-not $match -and $ls.Length -ge 5) {
+        foreach ($h in $heb) {
+          if ($h.skel.Length -ge 5 -and (Get-EditDistance $h.skel $ls 1) -le 1) { $match = $h; break }
+        }
+      }
+    }
+    if ($match) {
+      if ($l.year -gt 1900 -and ($match.year -eq 0 -or $l.year -lt $match.year)) { $match.year = $l.year }
+      if ($l.rank -lt $match.rank) { $match.rank = $l.rank }
+      $mergedCount++
+    } else {
+      [void]$keep.Add($l)
+      $latinKept++
+    }
+  }
+
+  # Fold near-identical Hebrew titles. The catalogue sometimes lists one song
+  # twice under spelling variants ("חופשי"/"חפשי", "אנטארקטיקה"/"אנטרקטיקה")
+  # or an outright typo. Tight rule - same artist, both titles reasonably
+  # long, exactly one edit apart - and we keep the better-ranked copy, which
+  # is the more widely listed spelling.
+  $final = New-Object System.Collections.ArrayList
+  foreach ($cand in ($keep | Sort-Object rank)) {
+    $isDup = $false
+    if ($cand.title -match '[א-ת]') {
+      $cn = Normalize-He $cand.title
+      if ($cn.Length -ge 8) {
+        foreach ($seen in $final) {
+          if (-not ($seen.title -match '[א-ת]')) { continue }
+          $sn = Normalize-He $seen.title
+          if ($sn.Length -ge 8 -and (Get-EditDistance $sn $cn 1) -le 1) {
+            if ($cand.year -gt 1900 -and ($seen.year -eq 0 -or $cand.year -lt $seen.year)) {
+              $seen.year = $cand.year
+            }
+            $isDup = $true; $dupMerged++; break
+          }
+        }
+      }
+    }
+    if (-not $isDup) { [void]$final.Add($cand) }
+  }
+  $byArtist[$artist] = $final
+}
+
+Write-Host "Transliterated titles folded into Hebrew twin: $mergedCount"
+Write-Host "Latin-titled songs with no Hebrew counterpart:  $latinKept"
+Write-Host "Near-duplicate Hebrew titles folded:            $dupMerged"
+
 # ---------------- pass 3: cap per artist, assign genres, emit ----------------
 $songs = New-Object System.Collections.ArrayList
 $seenGlobal = @{}
 $idSeen = @{}
 
 foreach ($artist in ($byArtist.Keys | Sort-Object)) {
-  $list = $byArtist[$artist] | Sort-Object rank | Select-Object -First $MAX_PER_ARTIST
+  # When choosing which of an artist's songs to keep, prefer the ones Apple
+  # titles in Hebrew. This is a nudge, not a rule: a much better-known track
+  # still wins its slot even if only a transliterated title exists for it.
+  foreach ($r in $byArtist[$artist]) {
+    $pen = 0
+    if ($r.title -notmatch '[א-ת]') { $pen = 10 }
+    $r | Add-Member -NotePropertyName sortKey -NotePropertyValue ([int]$r.rank + $pen) -Force
+  }
+  $list = $byArtist[$artist] | Sort-Object sortKey | Select-Object -First $MAX_PER_ARTIST
   foreach ($r in $list) {
     $gkey = (Normalize-He $artist) + '|' + (Normalize-He $r.title)
     if ($seenGlobal.ContainsKey($gkey)) { continue }

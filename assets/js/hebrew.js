@@ -117,6 +117,77 @@
   function hasHebrew(s) { return /[א-ת]/.test(String(s || '')); }
   function hasLatin(s) { return /[a-zA-Z]/.test(String(s || '')); }
 
+  /* ---- transliteration bridge ----
+   * Apple's catalogue titles some Israeli tracks in transliteration
+   * ("Omed Basha'ar") rather than Hebrew ("עומד בשער"). Where we can't
+   * recover the Hebrew title, a player typing Hebrew must still find the
+   * song. Both spellings share a consonant skeleton, because Hebrew is
+   * written without vowels in the first place:
+   *
+   *   "Omed Basha'ar" -> MDBSR <- "עומד בשער"
+   */
+  var HEB_SKEL = {
+    'א': '', 'ע': '', 'ו': '', 'י': '',   /* silent, or acting as vowels */
+    'ב': 'B', 'פ': 'P', 'ף': 'P',
+    'כ': 'K', 'ך': 'K', 'ק': 'K',
+    'ג': 'G', 'ד': 'D',
+    'ט': 'T', 'ת': 'T',
+    'ס': 'S', 'ש': 'S',
+    'ז': 'Z', 'צ': 'C', 'ץ': 'C',
+    'ח': 'H', 'ל': 'L',
+    'מ': 'M', 'ם': 'M',
+    'נ': 'N', 'ן': 'N',
+    'ר': 'R'
+  };
+
+  var LAT_SKEL = {
+    a: '', e: '', i: '', o: '', u: '', y: '',
+    b: 'B', v: 'B', w: 'B',
+    p: 'P', f: 'P',
+    k: 'K', q: 'K', c: 'K',
+    g: 'G', j: 'G',
+    d: 'D', t: 'T', s: 'S', z: 'Z',
+    h: 'H', l: 'L', m: 'M', n: 'N', r: 'R'
+  };
+
+  function hebSkeleton(s) {
+    var t = String(s || '').replace(/[^א-ת\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    var out = '', words = t.split(' ');
+    for (var w = 0; w < words.length; w++) {
+      var word = words[w];
+      for (var i = 0; i < word.length; i++) {
+        var c = word[i];
+        /* ה is audible at the start of a word ("הכל" -> Hakol) and silent
+         * elsewhere, where it is just a vowel marker */
+        if (c === 'ה') { out += (i === 0 ? 'H' : ''); continue; }
+        out += Object.prototype.hasOwnProperty.call(HEB_SKEL, c) ? HEB_SKEL[c] : '';
+      }
+    }
+    return out;
+  }
+
+  function latSkeleton(s) {
+    var t = String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+    /* digraphs first, via placeholders so later passes can't re-match them */
+    t = t.replace(/sh/g, '1').replace(/ch/g, '2').replace(/kh/g, '2')
+         .replace(/tz/g, '3').replace(/ts/g, '3')
+         .replace(/ph/g, '4').replace(/th/g, '5');
+    var DI = { '1': 'S', '2': 'H', '3': 'C', '4': 'P', '5': 'T' };
+    var out = '';
+    for (var i = 0; i < t.length; i++) {
+      var c = t[i];
+      if (DI[c]) { out += DI[c]; continue; }
+      out += Object.prototype.hasOwnProperty.call(LAT_SKEL, c) ? LAT_SKEL[c] : '';
+    }
+    return out;
+  }
+
+  /** Consonant skeleton, choosing the mapping by script. */
+  function skeleton(s) {
+    return hasHebrew(s) ? hebSkeleton(s) : latSkeleton(s);
+  }
+
   function tokens(s) {
     var n = norm(s);
     return n ? n.split(' ') : [];
@@ -137,6 +208,9 @@
     fromEnLayout: fromEnLayout,
     hasHebrew: hasHebrew,
     hasLatin: hasLatin,
+    skeleton: skeleton,
+    hebSkeleton: hebSkeleton,
+    latSkeleton: latSkeleton,
     tokens: tokens,
     stripProclitic: stripProclitic
   };

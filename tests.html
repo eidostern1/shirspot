@@ -124,6 +124,33 @@ check('ניקוד מלא ב-0.1',     g2.stats.score, 100);
 check('רצף עלה',             g2.stats.streak, 1);
 check('אחרי סיום אין שינוי', (function(){ var b=g2.stats.played; g2.guess(rak,''); return g2.stats.played===b; })(), true);
 
+/* ---------------- transliteration bridge ---------------- */
+/* Apple titles some Israeli tracks in transliteration ("Omed Basha'ar")
+ * rather than Hebrew. The build folds those into their Hebrew twin where
+ * one exists; for the rest, typing Hebrew still has to find and win them. */
+section('גשר תעתיק לטיני-עברי');
+function skelPair(lat, heb){ return Heb.latSkeleton(lat) === Heb.hebSkeleton(heb); }
+check('עומד בשער',      skelPair("Omed Basha'ar", 'עומד בשער'), true);
+check('בשנה הבאה',      skelPair("Bashana Haba'a", 'בשנה הבאה'), true);
+check('כביש החוף',      skelPair('Kvish Hachof', 'כביש החוף'), true);
+check('סלסולים',        skelPair('Silsulim', 'סלסולים'), true);
+check('שמחות קטנות',    skelPair('Smachot Ktanot', 'שמחות קטנות'), true);
+check('נקודה טובה',     skelPair('Nekuda Tova', 'נקודה טובה'), true);
+check('ה נשמעת בתחילת מילה', Heb.hebSkeleton('הכל'), 'HKL');
+check('ה שותקת באמצע',  Heb.hebSkeleton('בשנה'), 'BSN');
+check('שירים שונים לא מתבלבלים', Heb.latSkeleton('Tik Tok') === Heb.hebSkeleton('עומד בשער'), false);
+
+(function(){
+  var lat = DB.filter(function(s){ return !/[א-ת]/.test(s.title); });
+  if (!lat.length) { check('אין יותר כותרות לטיניות לבדוק', true, true); return; }
+  var sample = lat[0];
+  /* whatever remains in Latin must still be reachable by its own title */
+  check('כותרת לטינית נמצאת בחיפוש',
+    SongSearch.search(idx, sample.title, {limit:1}).length > 0, true);
+  check('כותרת לטינית מתקבלת כניחוש',
+    SongSearch.matchesSong(sample.title, sample), true);
+})();
+
 /* ---------------- onset detection ---------------- */
 /* Synthetic buffers, so these are deterministic and need no network.
  * Roughly one Apple preview in seven opens on silence or a fade-in, which

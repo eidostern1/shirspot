@@ -1,0 +1,5 @@
+{
+  "_comment": "Manual corrections for catalogue metadata errors, keyed by iTunes trackId. Apple occasionally ships a typo in a title; where a second catalogue entry proves the correct spelling, fix it here. Applied before de-duplication, so a corrected title merges naturally with its correct twin.",
+
+  "583990958": "הכוכבים דולקים על אש קטנה"
+}
