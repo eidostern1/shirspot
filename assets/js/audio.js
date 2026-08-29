@@ -18,6 +18,7 @@
 
   var ctx = null;
   var buffers = new Map();   /* songId -> AudioBuffer */
+  var offsets = new Map();   /* songId -> seconds; where the track gets loud */
   var inflight = new Map();  /* songId -> Promise */
   var current = null;        /* { source, gain, stopTimer } */
   var fallbackEl = null;
@@ -91,11 +92,16 @@
     var p = attempt(song.preview, true)
       .then(function (buf) {
         buffers.set(song.id, buf);
+        if (!offsets.has(song.id)) {
+          try { offsets.set(song.id, findOnset(buf)); }
+          catch (e) { offsets.set(song.id, 0); }
+        }
         inflight.delete(song.id);
         /* keep memory bounded on long sessions */
         if (buffers.size > 40) {
           var oldest = buffers.keys().next().value;
           buffers.delete(oldest);
+          offsets.delete(oldest);
         }
         return buf;
       })
@@ -106,6 +112,67 @@
 
     inflight.set(song.id, p);
     return p;
+  }
+
+  /* ---------------- onset detection ----------------
+   * Apple's 30s previews frequently begin inside a fade-in or on a quiet
+   * bar. Measured across a sample of this database, roughly one track in
+   * seven is effectively silent for its first 0.1s — which makes the
+   * hardest level unplayable rather than hard.
+   *
+   * So we find the first moment the track is properly loud and start every
+   * level there. Using one offset for all five levels matters: each level
+   * must be a longer window onto the *same* passage, not a different one.
+   */
+  var MAX_WINDOW = 15;   /* longest level, in seconds */
+
+  function findOnset(buf) {
+    var sr = buf.sampleRate;
+    var ch0 = buf.getChannelData(0);
+    var ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+    var win = Math.floor(sr * 0.02);            /* 20ms analysis window */
+    if (win < 1) return 0;
+
+    /* Never start so late that the 15s level would run past the end. */
+    var latest = Math.max(0, buf.duration - MAX_WINDOW - 0.2);
+    var searchEnd = Math.min(latest, 14);
+    var nWin = Math.floor((searchEnd * sr) / win);
+    if (nWin < 4) return 0;
+
+    var levels = new Float32Array(nWin);
+    for (var w = 0; w < nWin; w++) {
+      var s = w * win, sum = 0;
+      for (var i = 0; i < win; i++) {
+        var v = ch1 ? (ch0[s + i] + ch1[s + i]) * 0.5 : ch0[s + i];
+        sum += v * v;
+      }
+      levels[w] = Math.sqrt(sum / win);
+    }
+
+    /* Reference level = 80th percentile, i.e. "how loud this track normally
+     * is". A percentile rather than the peak, so a single drum hit can't set
+     * a bar the rest of the track never reaches. */
+    var sorted = levels.slice().sort();
+    var ref = sorted[Math.floor(nWin * 0.8)];
+    if (!(ref > 0)) return 0;
+
+    var threshold = ref * 0.35;
+    var sustain = 6;   /* 120ms must hold up, so we don't latch onto a click */
+
+    for (var k = 0; k + sustain <= nWin; k++) {
+      if (levels[k] < threshold) continue;
+      var held = true;
+      for (var j = k; j < k + sustain; j++) {
+        if (levels[j] < threshold * 0.5) { held = false; break; }
+      }
+      if (held) return Math.min(k * win / sr, latest);
+    }
+    return 0;
+  }
+
+  /** Where playback should begin for this song (0 until it has decoded). */
+  function getOffset(song) {
+    return (song && offsets.get(song.id)) || 0;
   }
 
   function stop() {
@@ -125,6 +192,8 @@
     stop();
     return fetchBuffer(song).then(function (buf) {
       var c = getCtx();
+      /* offset === null means "start wherever this track actually begins" */
+      if (offset == null) offset = offsets.get(song.id) || 0;
       var dur = Math.min(duration, Math.max(0, buf.duration - offset));
       if (dur <= 0) { offset = 0; dur = Math.min(duration, buf.duration); }
 
@@ -170,6 +239,8 @@
       fallbackEl.preload = 'auto';
     }
     var el = fallbackEl;
+    /* the buffer never decoded here, so there is no measured onset to use */
+    offset = offset || 0;
     return new Promise(function (resolve, reject) {
       var done = false;
       function begin() {
@@ -206,6 +277,8 @@
     play: playSnippet,
     stop: stop,
     preload: preload,
-    isReady: isReady
+    isReady: isReady,
+    getOffset: getOffset,
+    _findOnset: findOnset   /* exported for tests.html */
   };
 })(window);

@@ -450,3 +450,73 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* ---------------- win / lose popup ---------------- */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;   /* never blocks the buttons underneath */
+  z-index: 200;
+}
+
+.result-back { z-index: 100; }
+
+.result-modal {
+  max-width: 372px;
+  text-align: center;
+  padding: 26px 24px 20px;
+  animation: pop .38s cubic-bezier(.18, .9, .32, 1.4);
+}
+@keyframes pop {
+  0%   { opacity: 0; transform: scale(.82) translateY(16px); }
+  100% { opacity: 1; transform: none; }
+}
+.result-modal.win {
+  border-color: rgba(34, 224, 106, .45);
+  box-shadow: 0 0 70px rgba(34, 224, 106, .16), 0 26px 60px rgba(0, 0, 0, .6);
+}
+.result-modal.lose {
+  border-color: rgba(255, 77, 94, .4);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, .6);
+}
+
+.rm-verdict { font-size: 25px; font-weight: 800; line-height: 1.2; }
+.result-modal.win  .rm-verdict { color: var(--accent); }
+.result-modal.lose .rm-verdict { color: var(--bad); }
+
+.rm-sub { font-size: 13px; color: var(--fg-dim); margin-top: 4px; }
+.rm-sub b { color: var(--fg); font-family: var(--mono); }
+
+.rm-cover {
+  width: 152px; height: 152px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+  margin: 17px auto 15px;
+  background: #1a221e;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .6);
+  animation: coverIn .5s .1s backwards cubic-bezier(.2, .8, .3, 1.2);
+}
+@keyframes coverIn {
+  from { opacity: 0; transform: scale(.86) rotate(-4deg); }
+  to   { opacity: 1; transform: none; }
+}
+
+.rm-title  { font-size: 22px; font-weight: 800; line-height: 1.25; }
+.rm-artist { font-size: 15px; color: var(--fg-dim); margin-top: 3px; }
+.rm-meta   { font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); margin-top: 7px; }
+
+.rm-actions {
+  display: flex; gap: 8px; justify-content: center;
+  margin-top: 19px; flex-wrap: wrap;
+}
+.rm-actions .btn { padding: 12px 20px; }
+
+.rm-close {
+  margin-top: 13px;
+  font-size: 12px;
+  color: var(--fg-faint);
+  background: none; border: none;
+  font-family: inherit; cursor: pointer;
+}
+.rm-close:hover { color: var(--fg-dim); text-decoration: underline; }

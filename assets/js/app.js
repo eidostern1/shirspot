@@ -122,36 +122,47 @@
     });
   }
 
-  function renderResult() {
+  function closeResult() {
+    el.resultBack.hidden = true;
+    global.Confetti.stop();
+  }
+
+  function showResult() {
     var r = game.round;
-    if (!r || r.status === 'playing') { el.result.hidden = true; return; }
+    if (!r || r.status === 'playing') { closeResult(); return; }
 
     var s = r.song;
     var won = r.status === 'won';
     var secs = global.Game.STAGES[r.stage];
 
-    el.result.hidden = false;
-    el.result.className = 'result ' + (won ? 'win' : 'lose');
-    el.result.innerHTML =
-      '<div class="verdict">' + (won ? 'כל הכבוד! 🎉' : 'לא נורא… 😔') + '</div>' +
-      '<div class="sub">' + (won
-        ? 'זיהית אחרי ' + fmtSeconds(secs) + ' · ' + global.Game.POINTS[r.stage] + ' נקודות'
+    el.resultModal.className = 'modal result-modal ' + (won ? 'win' : 'lose');
+    el.resultModal.innerHTML =
+      '<div class="rm-verdict">' + (won ? 'כל הכבוד! 🎉' : 'לא נורא… 😔') + '</div>' +
+      '<div class="rm-sub">' + (won
+        ? 'זיהית אחרי <b>' + fmtSeconds(secs) + '</b> · <b>' + global.Game.POINTS[r.stage] + '</b> נקודות'
         : 'השיר היה') + '</div>' +
-      (s.art ? '<img class="cover" src="' + esc(s.art) + '" alt="" loading="lazy">' : '') +
-      '<div class="r-title">' + esc(s.title) + '</div>' +
-      '<div class="r-artist">' + esc(s.artist) + '</div>' +
-      '<div class="r-meta">' + (s.year ? s.year + ' · ' : '') + esc(s.artistLat || '') + '</div>' +
-      '<div class="r-actions">' +
+      (s.art ? '<img class="rm-cover" src="' + esc(s.art) + '" alt="">' : '') +
+      '<div class="rm-title">' + esc(s.title) + '</div>' +
+      '<div class="rm-artist">' + esc(s.artist) + '</div>' +
+      '<div class="rm-meta">' + (s.year ? s.year + ' · ' : '') + esc(s.artistLat || '') + '</div>' +
+      '<div class="rm-actions">' +
         '<button class="btn btn-accent" data-act="next">שיר הבא ←</button>' +
         '<button class="btn" data-act="full">▶ השמע 15 שנ׳</button>' +
       '</div>' +
-      '<div style="margin-top:14px"><a class="link-out" target="_blank" rel="noopener" href="https://music.apple.com/il/song/' +
-        encodeURIComponent(s.itunesId) + '">האזנה מלאה ב-Apple Music ↗</a></div>';
+      '<div style="margin-top:13px"><a class="link-out" target="_blank" rel="noopener" href="https://music.apple.com/il/song/' +
+        encodeURIComponent(s.itunesId) + '">האזנה מלאה ב-Apple Music ↗</a></div>' +
+      '<button class="rm-close" data-act="close">סגירה</button>';
 
-    $('[data-act="next"]', el.result).addEventListener('click', startRound);
-    $('[data-act="full"]', el.result).addEventListener('click', function () {
-      global.SnippetPlayer.play(s, 0, 15);
+    $('[data-act="next"]', el.resultModal).addEventListener('click', startRound);
+    $('[data-act="close"]', el.resultModal).addEventListener('click', closeResult);
+    $('[data-act="full"]', el.resultModal).addEventListener('click', function () {
+      global.SnippetPlayer.play(s, null, 15);
     });
+
+    el.resultBack.hidden = false;
+    if (won) global.Confetti.burst();
+    var nextBtn = $('[data-act="next"]', el.resultModal);
+    if (nextBtn) nextBtn.focus();
   }
 
   function setPlayIcon(playing) {
@@ -166,13 +177,18 @@
     var over = !r || r.status !== 'playing';
     renderStages();
     renderAttempts();
-    renderResult();
+    showResult();
     renderScorebar();
 
     el.dur.innerHTML = r ? fmtSeconds(global.Game.STAGES[r.stage]).replace(' ', '<small>') + '</small>' : '';
     el.input.disabled = over;
-    el.skipBtn.disabled = over;
-    el.skipBtn.textContent = r && r.stage === global.Game.STAGES.length - 1 ? 'ויתור' : 'דילוג ⏭';
+    el.skipBtn.disabled = false;
+    /* Once the round is over this button becomes the way forward, so the
+     * player is never stuck if they dismiss the popup. */
+    el.skipBtn.classList.toggle('btn-accent', over);
+    el.skipBtn.textContent = over
+      ? 'שיר הבא ←'
+      : (r.stage === global.Game.STAGES.length - 1 ? 'ויתור' : 'דילוג ⏭');
     closeSuggest();
     if (!over) el.input.value = '';
   }
@@ -198,7 +214,7 @@
         if (p < 1) requestAnimationFrame(tick);
       }
 
-      return global.SnippetPlayer.play(r.song, 0, secs, function () {
+      return global.SnippetPlayer.play(r.song, null, secs, function () {
         if (token === playToken) setPlayIcon(false);
       }).then(function () {
         requestAnimationFrame(tick);
@@ -227,7 +243,7 @@
     var r = game.newRound(song);
     if (!r) { busy = false; toast('אין מספיק שירים בסגנון הזה'); return; }
 
-    el.result.hidden = true;
+    closeResult();
     el.playBtn.disabled = true;
     renderRound();
 
@@ -272,7 +288,8 @@
 
   function doSkip() {
     var r = game.round;
-    if (!r || r.status !== 'playing') return;
+    /* after the round ends this button reads "next song" */
+    if (!r || r.status !== 'playing') { startRound(); return; }
     game.skip();
     renderRound();
     if (game.round.status === 'playing') play();
@@ -404,7 +421,8 @@
     el.suggest = $('#suggest');
     el.skipBtn = $('#skipBtn');
     el.attempts = $('#attempts');
-    el.result = $('#result');
+    el.resultBack = $('#resultBack');
+    el.resultModal = $('#resultModal');
     el.scorebar = $('#scorebar');
     el.toast = $('#toast');
     el.modalBack = $('#modalBack');
@@ -440,6 +458,9 @@
       if (e.target === el.modalBack) el.modalBack.hidden = true;
     });
     $('#modalClose').addEventListener('click', function () { el.modalBack.hidden = true; });
+    el.resultBack.addEventListener('click', function (e) {
+      if (e.target === el.resultBack) closeResult();
+    });
 
     el.input.addEventListener('input', function () {
       clearTimeout(sugTimer);
@@ -451,18 +472,32 @@
     el.input.addEventListener('keydown', function (e) {
       if (e.key === 'ArrowDown') { e.preventDefault(); moveSug(1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); moveSug(-1); }
-      else if (e.key === 'Escape') { closeSuggest(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); closeSuggest(); }
       else if (e.key === 'Enter') {
         e.preventDefault();
+        /* Submitting can open the result popup synchronously. Without this,
+         * the same keypress would bubble to the document handler, see an
+         * open popup, and skip straight past it to the next song. */
+        e.stopPropagation();
         var picked = activeSug >= 0 && suggestions[activeSug] ? suggestions[activeSug].song : null;
         submitGuess(picked);
       }
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !el.modalBack.hidden) el.modalBack.hidden = true;
+      if (e.key === 'Escape') {
+        if (!el.resultBack.hidden) { closeResult(); return; }
+        if (!el.modalBack.hidden) { el.modalBack.hidden = true; return; }
+      }
+      /* Enter on the result popup moves to the next song */
+      if (e.key === 'Enter' && !el.resultBack.hidden) {
+        e.preventDefault();
+        startRound();
+        return;
+      }
       /* space replays the snippet when not typing */
-      if (e.code === 'Space' && document.activeElement !== el.input && el.modalBack.hidden) {
+      if (e.code === 'Space' && document.activeElement !== el.input &&
+          el.modalBack.hidden && el.resultBack.hidden) {
         e.preventDefault();
         if (!el.playBtn.disabled) play();
       }

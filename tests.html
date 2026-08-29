@@ -24,6 +24,7 @@
 
 <script src="assets/js/hebrew.js"></script>
 <script src="assets/js/search.js"></script>
+<script src="assets/js/audio.js"></script>
 <script src="assets/js/game.js"></script>
 <script src="data/songs.js"></script>
 <script>
@@ -122,6 +123,52 @@ check('ניחוש נכון = ניצחון', res.correct && g2.round.status==='wo
 check('ניקוד מלא ב-0.1',     g2.stats.score, 100);
 check('רצף עלה',             g2.stats.streak, 1);
 check('אחרי סיום אין שינוי', (function(){ var b=g2.stats.played; g2.guess(rak,''); return g2.stats.played===b; })(), true);
+
+/* ---------------- onset detection ---------------- */
+/* Synthetic buffers, so these are deterministic and need no network.
+ * Roughly one Apple preview in seven opens on silence or a fade-in, which
+ * made the 0.1s level unplayable until we started at the real onset. */
+section('איתור תחילת הצליל');
+(function(){
+  var AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!AC) { check('OfflineAudioContext זמין', false, true); return; }
+  var sr = 44100, secs = 30;
+  var oc = new AC(1, sr*secs, sr);
+
+  function buildBuffer(silentSeconds){
+    var b = oc.createBuffer(1, sr*secs, sr);
+    var d = b.getChannelData(0);
+    for (var i = Math.floor(sr*silentSeconds); i < d.length; i++){
+      d[i] = (i % 97 / 97 - 0.5) * 0.8;   /* steady loud-ish signal */
+    }
+    return b;
+  }
+
+  var f = SnippetPlayer._findOnset;
+
+  var quiet2s = f(buildBuffer(2));
+  check('מדלג על 2 שניות שקט', quiet2s > 1.8 && quiet2s < 2.4, true);
+
+  var quietHalf = f(buildBuffer(0.5));
+  check('מדלג על חצי שניה שקט', quietHalf > 0.35 && quietHalf < 0.9, true);
+
+  check('שיר שמתחיל חזק נשאר ב-0', f(buildBuffer(0)), 0);
+
+  /* an all-silent clip has no onset to find; must not return nonsense */
+  var silent = oc.createBuffer(1, sr*secs, sr);
+  check('קליפ שקט לגמרי מחזיר 0', f(silent), 0);
+
+  /* the 15s level must still fit after the offset */
+  check('משאיר מקום ל-15 שניות', f(buildBuffer(2)) + 15 <= secs, true);
+
+  /* a lone click must not be mistaken for the start of the music */
+  var clicky = oc.createBuffer(1, sr*secs, sr);
+  var cd = clicky.getChannelData(0);
+  cd[Math.floor(sr*0.2)] = 1; cd[Math.floor(sr*0.2)+1] = -1;   /* 2-sample pop */
+  for (var j = Math.floor(sr*5); j < cd.length; j++) cd[j] = (j % 97 / 97 - 0.5) * 0.8;
+  var afterClick = f(clicky);
+  check('מתעלם מנקישה בודדת', afterClick > 4.5, true);
+})();
 
 /* ---------------- database integrity ---------------- */
 section('תקינות מאגר השירים');
