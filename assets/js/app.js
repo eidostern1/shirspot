@@ -53,7 +53,7 @@
     el.genres.innerHTML = '';
     global.Game.GENRES.forEach(function (g) {
       var n = g.id === 'all'
-        ? game.songs.length
+        ? game.songs.filter(function (s) { return s.lang !== 'en'; }).length
         : game.songs.filter(function (s) { return s.genres.indexOf(g.id) !== -1; }).length;
 
       var b = document.createElement('button');

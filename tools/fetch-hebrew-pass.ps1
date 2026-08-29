@@ -49,6 +49,9 @@ $utf8 = New-Object Text.UTF8Encoding($false)
 $n = 0
 foreach ($a in $roster) {
   $n++
+  if (-not $a.he) { continue }   # documentation entries carry no artist
+  # An artist whose name is already Latin has no Hebrew query to try.
+  if ($a.he -notmatch '[א-ת]') { continue }
   $out = Join-Path $cacheDir ((Slugify $a.he) + '.json')
   if (-not (Test-Path $out)) { Write-Host ("[{0}/{1}] no cache, skip" -f $n, $roster.Count); continue }
 

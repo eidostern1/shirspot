@@ -49,6 +49,7 @@ function Slugify($s) {
 $n = 0
 foreach ($a in $roster) {
   $n++
+  if (-not $a.he) { continue }   # documentation entries carry no artist
   $slug = Slugify $a.he
   $out  = Join-Path $cacheDir "$slug.json"
 
@@ -59,6 +60,23 @@ foreach ($a in $roster) {
 
   $collected = @()
 
+  # iTunes' artistTerm search is fuzzy: a generic stage name like "Future" or
+  # "Offset" comes back full of unrelated artists. Counting raw results would
+  # then suppress the fallback query and leave the artist with nothing once the
+  # build filters by name, so we count only results that really are this artist.
+  function Count-Valid($rows, $entry) {
+    $k = 0
+    foreach ($r in $rows) {
+      $an = ([string]$r.artistName).ToLower()
+      if (-not $an) { continue }
+      $hit = $false
+      foreach ($l in $entry.lat) { if ($l -and $an.Contains(([string]$l).ToLower())) { $hit = $true; break } }
+      if (-not $hit -and $an.Contains(([string]$entry.he).ToLower())) { $hit = $true }
+      if ($hit) { $k++ }
+    }
+    return $k
+  }
+
   # Pass 1: constrain to the artist field using the Latin name (relevance-ordered = popular first)
   foreach ($lat in $a.lat) {
     $u = "https://itunes.apple.com/search?term=$([uri]::EscapeDataString($lat))&attribute=artistTerm&entity=song&limit=40"
@@ -67,11 +85,12 @@ foreach ($a in $roster) {
       if ($j.resultCount -gt 0) { $collected += $j.results }
     } catch { Write-Host ("    latin query failed for {0}: {1}" -f $lat, $_.Exception.Message) }
     Start-Sleep -Milliseconds 3500
-    if ($collected.Count -ge 15) { break }
+    if ((Count-Valid $collected $a) -ge 15) { break }
   }
 
-  # Pass 2: free-text Hebrew name, in case Apple indexes the artist only in Hebrew
-  if ($collected.Count -lt 15) {
+  # Pass 2: free-text name, in case Apple indexes the artist only in Hebrew
+  # or the artistTerm search matched the wrong people entirely
+  if ((Count-Valid $collected $a) -lt 15) {
     $u2 = "https://itunes.apple.com/search?term=$([uri]::EscapeDataString($a.he))&media=music&entity=song&limit=40"
     try {
       $j2 = Get-JsonWithRetry $u2

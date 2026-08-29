@@ -26,8 +26,9 @@
     { id: '2020s',    he: 'להיטי היום' },
     { id: 'rock',     he: 'רוק ישראלי' },
     { id: 'pop',      he: 'פופ ישראלי' },
-    { id: 'hiphop',   he: 'היפ הופ' },
-    { id: 'classic',  he: 'קלאסיקות' }
+    { id: 'hiphop',   he: 'היפ הופ ישראלי' },
+    { id: 'classic',  he: 'קלאסיקות' },
+    { id: 'hiphopen', he: 'היפ הופ עולמי' }
   ];
 
   function readJSON(key, fallback) {
@@ -55,9 +56,14 @@
     this.round = null;
   }
 
+  /* "הכול" means every Hebrew song. The English hip hop set is a deliberate
+   * side pool — folding ~700 English tracks into the default would change
+   * what this game is. */
   Game.prototype.pool = function () {
     var g = this.genre;
-    if (g === 'all') return this.songs;
+    if (g === 'all') {
+      return this.songs.filter(function (s) { return s.lang !== 'en'; });
+    }
     return this.songs.filter(function (s) { return s.genres && s.genres.indexOf(g) !== -1; });
   };
 

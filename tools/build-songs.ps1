@@ -88,6 +88,14 @@ function Artist-Matches($apiArtist, $entry) {
   return $false
 }
 
+# Genre config is read from the roster rather than from the cached payload,
+# so re-tagging an artist only needs a rebuild, not a re-fetch.
+$ROSTER = @{}
+$rosterJson = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'artists.json'), [Text.Encoding]::UTF8) | ConvertFrom-Json
+foreach ($a in $rosterJson) {
+  if ($a.he) { $ROSTER[$a.he] = $a }
+}
+
 # ---------------- pass 1: collect every acceptable copy ----------------
 $copies = @{}   # key "artistHe|titleNorm" -> list of copies
 
@@ -96,6 +104,9 @@ Write-Host "Reading $($files.Count) cache files..."
 
 foreach ($f in $files) {
   $entry = [IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8) | ConvertFrom-Json
+  $cfg = $ROSTER[$entry.he]
+  $genresForArtist = if ($cfg -and $cfg.g) { $cfg.g } else { $entry.g }
+  $onlyRange = if ($cfg) { $cfg.only } else { $null }
   $rank = 0
   foreach ($r in $entry.fetched) {
     $rank++
@@ -126,7 +137,8 @@ foreach ($f in $files) {
     if (-not $copies.ContainsKey($key)) { $copies[$key] = New-Object System.Collections.ArrayList }
     [void]$copies[$key].Add([pscustomobject]@{
       artistHe  = $entry.he
-      genres    = $entry.g
+      genres    = $genresForArtist
+      only      = $onlyRange
       title     = $title
       titleNorm = $tn
       artistLat = $r.artistName
@@ -153,6 +165,7 @@ foreach ($key in $copies.Keys) {
   $rec = [pscustomobject]@{
     artistHe  = $best.artistHe
     genres    = $best.genres
+    only      = $best.only
     title     = $best.title
     artistLat = $best.artistLat
     itunesId  = $best.itunesId
@@ -260,7 +273,37 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
     if ($r.title -notmatch '[א-ת]') { $pen = 10 }
     $r | Add-Member -NotePropertyName sortKey -NotePropertyValue ([int]$r.rank + $pen) -Force
   }
-  $list = $byArtist[$artist] | Sort-Object sortKey | Select-Object -First $MAX_PER_ARTIST
+  # `only` restricts an artist to a release window - used for the English hip
+  # hop chart artists, who are wanted for their 2016-2024 hits rather than
+  # their whole back catalogue.
+  #
+  # This has to happen BEFORE the per-artist cap, or out-of-window tracks eat
+  # the slots and the artist ends up with far fewer songs than intended.
+  #
+  # The upper bound is also softened: Apple stamps re-releases with the
+  # reissue date, and for some artists that is their WHOLE catalogue (every
+  # Trippie Redd entry reports 2026). Applying a hard ceiling there deletes
+  # the artist entirely. So if the full window leaves too little, we keep the
+  # lower bound - which is the half that actually matters, since it is what
+  # excludes an artist's older, pre-2016 era - and drop the ceiling.
+  $candidates = $byArtist[$artist]
+  $cfgOnly = $null
+  foreach ($c in $candidates) { if ($c.only -and $c.only.Count -eq 2) { $cfgOnly = $c.only; break } }
+
+  if ($cfgOnly) {
+    $lo = [int]$cfgOnly[0]; $hi = [int]$cfgOnly[1]
+    $windowed = @($candidates | Where-Object { $_.year -ge $lo -and $_.year -le $hi })
+    if ($windowed.Count -lt 5) {
+      $relaxed = @($candidates | Where-Object { $_.year -ge $lo })
+      if ($relaxed.Count -gt $windowed.Count) {
+        Write-Host ("  {0}: only {1} in {2}-{3} (Apple re-release dating); using {4}+ instead -> {5}" -f $artist, $windowed.Count, $lo, $hi, $lo, $relaxed.Count)
+        $windowed = $relaxed
+      }
+    }
+    $candidates = $windowed
+  }
+
+  $list = $candidates | Sort-Object sortKey | Select-Object -First $MAX_PER_ARTIST
   foreach ($r in $list) {
     $gkey = (Normalize-He $artist) + '|' + (Normalize-He $r.title)
     if ($seenGlobal.ContainsKey($gkey)) { continue }
@@ -269,10 +312,14 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
     $g = New-Object System.Collections.ArrayList
     foreach ($x in $r.genres) { if (-not $g.Contains($x)) { [void]$g.Add($x) } }
 
+    # The decade playlists ("שנות התשעים" and friends) are about Israeli
+    # music, so English-language tracks stay out of them.
+    $isEnglish = $g.Contains('hiphopen')
+
     # Decade tag from the earliest year we saw.
     $isClassic = $g.Contains('classic')
     $y = $r.year
-    if ($y -ge 1960 -and $y -le $THIS_YEAR) {
+    if (-not $isEnglish -and $y -ge 1960 -and $y -le $THIS_YEAR) {
       $decadeOk = $true
       # A "classic" artist showing a 2010+ date is certainly a re-release,
       # so we decline to guess rather than mislabel it.
@@ -300,6 +347,7 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
       id        = $id
       title     = $r.title
       artist    = $artist
+      lang      = $(if ($isEnglish) { 'en' } else { 'he' })
       artistLat = $r.artistLat
       year      = $r.year
       genres    = @($g)

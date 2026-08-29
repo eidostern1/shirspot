@@ -212,6 +212,48 @@ check('כל הסגנונות בתפריט קיימים', Game.GENRES.filter(func
   return x.id!=='all' && DB.filter(function(s){return s.genres.indexOf(x.id)!==-1;}).length < 5;
 }).length, 0);
 
+/* ---------------- english hip hop genre ---------------- */
+section('היפ הופ עולמי');
+(function(){
+  var en = DB.filter(function(s){ return s.genres.indexOf('hiphopen') !== -1; });
+  check('הסגנון מאוכלס', en.length >= 100, true);
+  check('כל שיריו מסומנים אנגלית',
+    en.filter(function(s){ return s.lang !== 'en'; }).length, 0);
+  check('לא מתערבב בעשורים העבריים',
+    en.filter(function(s){ return ['70s','80s','90s','2000s','2010s','2020s'].some(function(d){ return s.genres.indexOf(d) !== -1; }); }).length, 0);
+
+  /* "הכול" must stay a Hebrew game */
+  var g = new Game(DB); g.setGenre('all');
+  check('"הכול" לא כולל אנגלית',
+    g.pool().filter(function(s){ return s.lang === 'en'; }).length, 0);
+  check('"הכול" עדיין מלא', g.pool().length > 800, true);
+
+  g.setGenre('hiphopen');
+  check('בחירת הסגנון מחזירה שירי אנגלית',
+    g.pool().length === en.length && g.pool().every(function(s){ return s.lang === 'en'; }), true);
+
+  /* chart artists are limited to the 2016-2024 window; the named ones aren't */
+  var drake = DB.filter(function(s){ return s.artist === 'Drake'; });
+  if (drake.length) {
+    check('Drake מוגבל ל-2016-2024',
+      drake.filter(function(s){ return s.year < 2016 || s.year > 2024; }).length, 0);
+  }
+  ['Kanye West','Travis Scott','JID','21 Savage','Future','Denzel Curry'].forEach(function(a){
+    check('יש שירים של ' + a, DB.filter(function(s){ return s.artist === a; }).length > 0, true);
+  });
+
+  /* English titles have to be searchable and acceptable as guesses */
+  if (en.length) {
+    var sample = en[0];
+    check('שיר אנגלי נמצא בחיפוש',
+      SongSearch.search(idx, sample.title, {limit:1}).length > 0, true);
+    check('שיר אנגלי מתקבל כניחוש',
+      SongSearch.matchesSong(sample.title, sample), true);
+    check('חיפוש לפי שם אמן אנגלי',
+      SongSearch.search(idx, 'Kendrick Lamar', {limit:1}).length > 0, true);
+  }
+})();
+
 /* ---------------- restore ---------------- */
 Object.keys(SNAPSHOT).forEach(function(k){
   if (SNAPSHOT[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, SNAPSHOT[k]);
