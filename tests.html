@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שירספוט — בדיקות</title>
+<style>
+  body { background:#07090a; color:#eaf2ec; font-family:'Heebo',system-ui,sans-serif; padding:22px; max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; } h2 { font-size:15px; color:#8a9a90; margin-top:26px; border-bottom:1px solid #1d2a22; padding-bottom:6px; }
+  .row { display:flex; gap:10px; padding:5px 0; font-size:13.5px; align-items:baseline; border-bottom:1px solid rgba(255,255,255,.04); }
+  .ok  { color:#22e06a; font-weight:700; flex:none; width:34px; }
+  .bad { color:#ff4d5e; font-weight:700; flex:none; width:34px; }
+  .name { flex:1; }
+  .got { color:#5d6b63; font-family:ui-monospace,monospace; font-size:11.5px; direction:ltr; text-align:left; max-width:45%; overflow-wrap:anywhere; }
+  #summary { margin:18px 0; padding:14px; border-radius:10px; font-weight:700; font-size:16px; }
+  .pass { background:rgba(34,224,106,.12); border:1px solid #22e06a; }
+  .fail { background:rgba(255,77,94,.12); border:1px solid #ff4d5e; }
+</style>
+</head>
+<body>
+<h1>שירספוט — בדיקות אוטומטיות</h1>
+<div id="summary">מריץ…</div>
+<div id="out"></div>
+
+<script src="assets/js/hebrew.js"></script>
+<script src="assets/js/search.js"></script>
+<script src="assets/js/game.js"></script>
+<script src="data/songs.js"></script>
+<script>
+/* Keep the player's real stats out of harm's way while we exercise Game. */
+var SNAPSHOT = {};
+['shirspot.stats.v1','shirspot.recent.v1','shirspot.genre','shirspot.seen'].forEach(function(k){
+  SNAPSHOT[k] = localStorage.getItem(k);
+});
+
+var pass = 0, fail = 0, out = document.getElementById('out');
+
+function section(t){ var h=document.createElement('h2'); h.textContent=t; out.appendChild(h); }
+function check(name, actual, expected){
+  var ok = JSON.stringify(actual) === JSON.stringify(expected);
+  ok ? pass++ : fail++;
+  var d=document.createElement('div'); d.className='row';
+  d.innerHTML = '<span class="'+(ok?'ok':'bad')+'">'+(ok?'PASS':'FAIL')+'</span>'+
+                '<span class="name">'+name+'</span>'+
+                '<span class="got">'+(ok?'':'got '+JSON.stringify(actual)+' want '+JSON.stringify(expected))+'</span>';
+  out.appendChild(d);
+}
+
+var DB = window.SONGS_DB || [];
+var idx = SongSearch.buildIndex(DB);
+function topArtists(q,n){ return SongSearch.search(idx,q,{limit:n||3}).map(function(h){return h.song.artist;}); }
+function firstIs(q, artist, title){
+  var r = SongSearch.search(idx,q,{limit:1})[0];
+  return !!r && r.song.artist===artist && r.song.title.indexOf(title)!==-1;
+}
+function song(a,t){ return DB.find(function(s){ return s.artist.indexOf(a)!==-1 && s.title.indexOf(t)!==-1; }); }
+
+/* ---------------- normalisation ---------------- */
+section('נרמול עברית');
+check('מסיר ניקוד',            Heb.norm('שָׁלוֹם'), 'שלומ');
+check('אותיות סופיות',          Heb.norm('שלום'), Heb.norm('שלומ'));
+check('גרש/גרשיים',             Heb.norm('שב"ק ס\''), 'שבק ס');
+check('כתיב מלא/חסר (יי)',      Heb.norm('אייל'), Heb.norm('איל'));
+check('רווחים מיותרים',         Heb.norm('  עומר   אדם '), 'עומר אדמ');
+check('הומופון ע/א',            Heb.phonetic('ננעלו'), Heb.phonetic('ננאלו'));
+check('הומופון ח/כ',            Heb.phonetic('חדד'), Heb.phonetic('כדד'));
+check('פריסת מקלדת אנגלית',     Heb.fromEnLayout('akuo'), 'שלומ');
+
+/* ---------------- search ---------------- */
+section('חיפוש — שם זמר מחזיר את כל שיריו');
+check('עומר אדם',   topArtists('עומר אדם'),  ['עומר אדם','עומר אדם','עומר אדם']);
+check('משינה (לטינית)', topArtists('Mashina'), ['משינה','משינה','משינה']);
+check('שם חלקי',    topArtists('סטטיק')[0],  'סטטיק ובן אל תבורי');
+check('בלי רווח',   topArtists('עומראדם')[0],'עומר אדם');
+check('שגיאת כתיב בזמר', topArtists('עמר אדם')[0], 'עומר אדם');
+check('הומופון בזמר',    topArtists('שרית כדד')[0], 'שרית חדד');
+check('ק/כ בזמר',        topArtists('כובי פרץ')[0], 'קובי פרץ');
+
+section('חיפוש — כותרות');
+check('כותרת מלאה',        firstIs('שלח לי מלאך','משינה','שלח לי מלאך'), true);
+check('אות סופית שגויה',   firstIs('שלח לי מלאכ','משינה','שלח לי מלאך'), true);
+check('שגיאת כתיב בכותרת', firstIs('רכבת לילא','משינה','רכבת לילה'), true);
+check('כותרת לטינית',      firstIs('Tudo Bom','סטטיק ובן אל תבורי','Tudo Bom'), true);
+check('סוגריים בכותרת',    firstIs('אם ננעלו','עפרה חזה','אם ננעלו'), true);
+check('ג׳יבריש = ריק',     SongSearch.search(idx,'zzzqqxx',{limit:5}).length, 0);
+check('שאילתה ריקה',       SongSearch.search(idx,'   ',{limit:5}).length, 0);
+
+/* ---------------- guess acceptance ---------------- */
+section('קבלת ניחוש חופשי (בלי בחירה מהרשימה)');
+var nin = song('עפרה','ננעלו'), rak = song('משינה','רכבת'), tel = song('עומר אדם','תל אביב');
+check('מדויק',                 SongSearch.matchesSong('אם ננעלו', nin), true);
+check('שגיאת כתיב ע/א',        SongSearch.matchesSong('אם ננאלו', nin), true);
+check('אות כפולה בטעות',       SongSearch.matchesSong('רכבת ליללה', rak), true);
+check('זמר + שיר',             SongSearch.matchesSong('עפרה חזה אם ננעלו', nin), true);
+check('דוחה שיר אחר',          SongSearch.matchesSong('תל אביב', nin), false);
+check('דוחה מילה גנרית קצרה',  SongSearch.matchesSong('אם', nin), false);
+check('דוחה שם זמר בלבד',      SongSearch.matchesSong('עפרה חזה', nin), false);
+check('מקבל תל אביב הנכון',    SongSearch.matchesSong('תל אביב', tel), true);
+
+/* ---------------- game rules ---------------- */
+section('חוקי המשחק');
+check('חמישה שלבים',        Game.STAGES, [0.1,0.5,2,8,15]);
+var g = new Game(DB);
+g.resetStats();
+var r = g.newRound(nin);
+check('מתחיל ב-0.1',        g.stageSeconds(), 0.1);
+g.guess(null,'שיר לא נכון בכלל');
+check('טעות מקדמת ל-0.5',   g.stageSeconds(), 0.5);
+g.skip();
+check('דילוג מקדם ל-2',      g.stageSeconds(), 2);
+g.skip(); g.skip();
+check('הגיע ל-15',           g.stageSeconds(), 15);
+check('עדיין משחק',          g.round.status, 'playing');
+g.guess(null,'עוד ניחוש שגוי לגמרי');
+check('טעות ב-15 = הפסד',    g.round.status, 'lost');
+check('נחשף השיר הנכון',     g.round.song.id, nin.id);
+
+var g2 = new Game(DB); g2.resetStats();
+g2.newRound(rak);
+var res = g2.guess(rak, '');
+check('ניחוש נכון = ניצחון', res.correct && g2.round.status==='won', true);
+check('ניקוד מלא ב-0.1',     g2.stats.score, 100);
+check('רצף עלה',             g2.stats.streak, 1);
+check('אחרי סיום אין שינוי', (function(){ var b=g2.stats.played; g2.guess(rak,''); return g2.stats.played===b; })(), true);
+
+/* ---------------- database integrity ---------------- */
+section('תקינות מאגר השירים');
+check('יש שירים',              DB.length > 500, true);
+check('לכל שיר יש קדימון',      DB.filter(function(s){return !s.preview;}).length, 0);
+check('לכל שיר יש כותרת',       DB.filter(function(s){return !s.title;}).length, 0);
+check('לכל שיר יש זמר',         DB.filter(function(s){return !s.artist;}).length, 0);
+check('מזהים ייחודיים',         new Set(DB.map(function(s){return s.id;})).size, DB.length);
+check('קדימונים מ-Apple בלבד',  DB.filter(function(s){return s.preview.indexOf('https://')!==0;}).length, 0);
+['mizrahit','90s','2000s'].forEach(function(gen){
+  check('סגנון "'+gen+'" מאוכלס', DB.filter(function(s){return s.genres.indexOf(gen)!==-1;}).length >= 50, true);
+});
+check('כל הסגנונות בתפריט קיימים', Game.GENRES.filter(function(x){
+  return x.id!=='all' && DB.filter(function(s){return s.genres.indexOf(x.id)!==-1;}).length < 5;
+}).length, 0);
+
+/* ---------------- restore ---------------- */
+Object.keys(SNAPSHOT).forEach(function(k){
+  if (SNAPSHOT[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, SNAPSHOT[k]);
+});
+
+var s = document.getElementById('summary');
+s.className = fail ? 'fail' : 'pass';
+s.textContent = fail ? (fail + ' בדיקות נכשלו · ' + pass + ' עברו')
+                     : ('הכול תקין — ' + pass + ' בדיקות עברו ✓');
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>שירספוט — נחשו את השיר</title>
+<meta name="description" content="משחק זיהוי שירים בעברית. שומעים 0.1 שניות ומנחשים — מזרחית, שנות התשעים, שנות האלפיים ועוד.">
+<meta name="theme-color" content="#07090a">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="שירספוט — נחשו את השיר">
+<meta property="og:description" content="משחק זיהוי שירים בעברית. 0.1 שניות. תזהו?">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://audio-ssl.itunes.apple.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+</head>
+<body>
+
+<div class="spotlight" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <button class="icon-btn" id="statsBtn" type="button" title="סטטיסטיקה" aria-label="סטטיסטיקה">📊</button>
+    <button class="icon-btn" id="helpBtn" type="button" title="איך משחקים" aria-label="איך משחקים">?</button>
+  </div>
+
+  <h1 class="brand">שירספוט</h1>
+  <p class="tagline">שומעים רגע — ומנחשים את השיר</p>
+
+  <div id="loading" class="loading">טוען את מאגר השירים…</div>
+
+  <main id="main" hidden>
+
+    <div class="genres" id="genres" role="group" aria-label="סגנון מוזיקלי"></div>
+
+    <div class="scorebar" id="scorebar"></div>
+
+    <div class="stages" id="stages" aria-hidden="true"></div>
+    <div class="stage-labels" id="stageLabels" aria-hidden="true"></div>
+
+    <div class="player">
+      <button class="play-btn" id="playBtn" type="button" aria-label="השמע את הקטע"></button>
+      <div class="dur" id="dur"></div>
+    </div>
+
+    <div class="guess-row">
+      <div class="combo">
+        <span class="mag" aria-hidden="true">🔍</span>
+        <input class="guess-input" id="guessInput" type="text"
+               placeholder="שם השיר או הזמר…"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest">
+        <div class="suggest" id="suggest" role="listbox" hidden></div>
+      </div>
+      <button class="btn" id="skipBtn" type="button">דילוג ⏭</button>
+    </div>
+
+    <div class="attempts" id="attempts"></div>
+
+    <div class="result" id="result" hidden></div>
+
+  </main>
+
+  <footer class="footer">
+    קטעי השמע הם קדימונים ציבוריים של 30 שניות משירות החיפוש של Apple,<br>
+    ומושמעים ישירות משרתי Apple. אין כאן קבצי מוזיקה.
+  </footer>
+</div>
+
+<div class="modal-back" id="modalBack" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div id="modalBody"></div>
+    <div style="text-align:center;margin-top:18px">
+      <button class="btn" id="modalClose" type="button">סגירה</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/js/hebrew.js"></script>
+<script src="assets/js/search.js"></script>
+<script src="assets/js/audio.js"></script>
+<script src="assets/js/game.js"></script>
+<script src="data/songs.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

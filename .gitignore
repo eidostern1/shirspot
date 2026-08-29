@@ -1,0 +1,8 @@
+# Raw iTunes API responses — 12 MB, and fully regenerable with
+# tools/fetch-itunes.ps1. The built database in data/ IS committed.
+tools/cache/
+
+# local
+.DS_Store
+Thumbs.db
+*.log
