@@ -28,7 +28,8 @@
     { id: 'pop',      he: 'פופ ישראלי' },
     { id: 'hiphop',   he: 'היפ הופ ישראלי' },
     { id: 'classic',  he: 'קלאסיקות' },
-    { id: 'hiphopen', he: 'היפ הופ עולמי' }
+    { id: 'hiphopen', he: 'היפ הופ עולמי' },
+    { id: 'eyalgolan', he: 'אייל גולן' }
   ];
 
   function readJSON(key, fallback) {

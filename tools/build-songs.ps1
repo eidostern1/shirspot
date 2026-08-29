@@ -25,6 +25,13 @@ if (Test-Path $overridePath) {
 }
 
 $MAX_PER_ARTIST = 16
+
+# Artists carrying a year window (the English hip hop chart names) are wanted
+# for their era-defining hits, not their catalogue. Sixteen each produced 900
+# songs, most of them album tracks nobody would recognise. Their cache is
+# popularity-ranked by fetch-popular.ps1, so the top few really are the hits.
+# The by-name artists are exempt and keep the full allowance.
+$MAX_PER_CHART_ARTIST = 5
 $THIS_YEAR = 2026
 
 # Tracks we never want in a "name that tune" game.
@@ -303,7 +310,11 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
     $candidates = $windowed
   }
 
-  $list = $candidates | Sort-Object sortKey | Select-Object -First $MAX_PER_ARTIST
+  # An artist with their own dedicated playlist needs more than the usual
+  # allowance, so the roster can override the cap per artist.
+  $cap = if ($cfgOnly) { $MAX_PER_CHART_ARTIST } else { $MAX_PER_ARTIST }
+  if ($ROSTER.ContainsKey($artist) -and $ROSTER[$artist].max) { $cap = [int]$ROSTER[$artist].max }
+  $list = $candidates | Sort-Object sortKey | Select-Object -First $cap
   foreach ($r in $list) {
     $gkey = (Normalize-He $artist) + '|' + (Normalize-He $r.title)
     if ($seenGlobal.ContainsKey($gkey)) { continue }

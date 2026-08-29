@@ -254,6 +254,43 @@ section('היפ הופ עולמי');
   }
 })();
 
+/* ---------------- single-artist playlist ---------------- */
+section('קטגוריית אייל גולן');
+(function(){
+  var eg = DB.filter(function(s){ return s.genres.indexOf('eyalgolan') !== -1; });
+  check('הקטגוריה מאוכלסת', eg.length >= 30, true);
+  check('רק שירים של אייל גולן',
+    eg.filter(function(s){ return s.artist !== 'אייל גולן'; }).length, 0);
+  check('כל שיריו במאגר נכללים',
+    eg.length, DB.filter(function(s){ return s.artist === 'אייל גולן'; }).length);
+  check('נשאר גם בסגנון מזרחית',
+    eg.every(function(s){ return s.genres.indexOf('mizrahit') !== -1; }), true);
+
+  var g = new Game(DB); g.setGenre('eyalgolan');
+  check('בחירת הקטגוריה מסננת נכון',
+    g.pool().length === eg.length, true);
+})();
+
+/* ---------------- hits, not deep cuts ---------------- */
+section('רשימת הלהיטים מדויקת');
+(function(){
+  var named = ['Kanye West','Travis Scott','JID','21 Savage','Future','Denzel Curry'];
+  var en = DB.filter(function(s){ return s.genres.indexOf('hiphopen') !== -1; });
+  var chart = en.filter(function(s){ return named.indexOf(s.artist) === -1; });
+
+  /* chart artists are capped tightly so only their best-known songs survive */
+  var counts = {};
+  chart.forEach(function(s){ counts[s.artist] = (counts[s.artist] || 0) + 1; });
+  check('אמן מצעד לא עובר 5 שירים',
+    Object.keys(counts).filter(function(a){ return counts[a] > 5; }).length, 0);
+
+  /* the by-name artists keep their bigger allowance */
+  check('האמנים שנבחרו בשם לא קוצצו',
+    named.filter(function(a){ return DB.filter(function(s){ return s.artist === a; }).length < 10; }).length, 0);
+
+  check('הרשימה התכווצה משמעותית', en.length < 450, true);
+})();
+
 /* ---------------- restore ---------------- */
 Object.keys(SNAPSHOT).forEach(function(k){
   if (SNAPSHOT[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, SNAPSHOT[k]);

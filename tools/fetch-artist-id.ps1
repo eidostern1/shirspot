@@ -12,6 +12,11 @@
 #
 # Resumable: artists already carrying idPass=true are skipped.
 
+# -Only lets you target specific artists by name, e.g. an artist who has been
+# given a playlist of their own and needs deeper coverage than the roster pass
+# provides:  -Only 'אייל גולן'
+param([string[]]$Only)
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ErrorActionPreference = 'Continue'
 
@@ -47,7 +52,11 @@ function Slugify($s) {
 }
 
 $utf8 = New-Object Text.UTF8Encoding($false)
-$targets = @($roster | Where-Object { $_.he -and $_.g -contains 'hiphopen' })
+$targets = if ($Only) {
+  @($roster | Where-Object { $_.he -and $Only -contains $_.he })
+} else {
+  @($roster | Where-Object { $_.he -and $_.g -contains 'hiphopen' })
+}
 $n = 0
 
 foreach ($a in $targets) {

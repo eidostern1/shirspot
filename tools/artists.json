@@ -1,6 +1,6 @@
 [
   { "he": "עומר אדם", "lat": ["Omer Adam"], "g": ["mizrahit", "pop"] },
-  { "he": "אייל גולן", "lat": ["Eyal Golan"], "g": ["mizrahit"] },
+  { "he": "אייל גולן", "lat": ["Eyal Golan"], "g": ["mizrahit", "eyalgolan"], "max": 60 },
   { "he": "שרית חדד", "lat": ["Sarit Hadad"], "g": ["mizrahit"] },
   { "he": "משה פרץ", "lat": ["Moshe Peretz"], "g": ["mizrahit"] },
   { "he": "דודו אהרון", "lat": ["Dudu Aharon"], "g": ["mizrahit"] },
