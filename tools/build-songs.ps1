@@ -56,6 +56,9 @@ function Test-Excluded($name, $album) {
 function Normalize-He($s) {
   if (-not $s) { return '' }
   $t = [string]$s
+  # Strip Latin diacritics as well, so "Omertá" and "Omerta" de-duplicate to a
+  # single song. This matters now that most of the database is non-Hebrew.
+  $t = $t.Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}', ''
   $t = $t -replace '[֑-ׇֽֿׁׂׅׄ]', ''
   $t = $t -replace "[`'`"``׳״‘’“”]", ''
   $t = $t.Replace([char]0x05DA, [char]0x05DB).
@@ -80,9 +83,22 @@ function Clean-Title($s) {
   return $t.Trim().Trim('-').Trim()
 }
 
-function Artist-Matches($apiArtist, $entry) {
-  $a = ([string]$apiArtist).ToLower()
+function Artist-Matches($apiArtist, $entry, $exact = $false) {
+  $a = ([string]$apiArtist).ToLower().Trim()
   if (-not $a) { return $false }
+
+  # Band names are often ordinary words, and a substring test happily accepts a
+  # different act whose name merely begins the same way: searching for the
+  # thrash band Exodus also matches "Exodus featuring Xan", and Ghost matches
+  # "CreepP, Ghost & PALS". Those are different artists, not features. Bands
+  # are credited under their exact name on their own songs, so metal demands an
+  # exact match. (Hip hop cannot: features and joint credits are the norm
+  # there, so it keeps the substring test.)
+  if ($exact) {
+    foreach ($l in $entry.lat) { if ($l -and $a -eq ([string]$l).ToLower().Trim()) { return $true } }
+    if ($a -eq ([string]$entry.he).ToLower().Trim()) { return $true }
+    return $false
+  }
   foreach ($l in $entry.lat) {
     $ll = ([string]$l).ToLower()
     if ($ll -and $a.Contains($ll)) { return $true }
@@ -112,14 +128,23 @@ Write-Host "Reading $($files.Count) cache files..."
 foreach ($f in $files) {
   $entry = [IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8) | ConvertFrom-Json
   $cfg = $ROSTER[$entry.he]
-  $genresForArtist = if ($cfg -and $cfg.g) { $cfg.g } else { $entry.g }
+  # The roster is the source of truth. A cache file whose artist has been
+  # removed from it must be ignored entirely - otherwise the stale cached
+  # payload keeps supplying its genre tag while losing the roster-side year
+  # window with it, quietly readmitting the songs the window excluded.
+  if (-not $cfg) {
+    Write-Host ("  skipping {0}: no longer in artists.json" -f $entry.he)
+    continue
+  }
+  $genresForArtist = if ($cfg.g) { $cfg.g } else { $entry.g }
   $onlyRange = if ($cfg) { $cfg.only } else { $null }
+  $exactArtist = ($genresForArtist -contains 'metal')
   $rank = 0
   foreach ($r in $entry.fetched) {
     $rank++
     if (-not $r.previewUrl) { continue }
     if (-not $r.trackName) { continue }
-    if (-not (Artist-Matches $r.artistName $entry)) { continue }
+    if (-not (Artist-Matches $r.artistName $entry $exactArtist)) { continue }
     if (Test-Excluded $r.trackName $r.collectionName) { continue }
 
     $title = Clean-Title $r.trackName
@@ -297,10 +322,21 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
   $cfgOnly = $null
   foreach ($c in $candidates) { if ($c.only -and $c.only.Count -eq 2) { $cfgOnly = $c.only; break } }
 
+  # `strict` forbids relaxing the window. It exists because the softening
+  # below drops the CEILING, which is right for "these years' hits" (where a
+  # re-release date inflates a song out of range) but exactly wrong for a
+  # genre defined as "up to year X" - there the ceiling is the whole point,
+  # and relaxing it would admit the very releases we mean to exclude.
+  $cfgStrict = $false
+  if ($ROSTER.ContainsKey($artist) -and $ROSTER[$artist].strict) { $cfgStrict = $true }
+
   if ($cfgOnly) {
     $lo = [int]$cfgOnly[0]; $hi = [int]$cfgOnly[1]
     $windowed = @($candidates | Where-Object { $_.year -ge $lo -and $_.year -le $hi })
-    if ($windowed.Count -lt 5) {
+    if ($cfgStrict -and $windowed.Count -lt 3) {
+      Write-Host ("  {0}: only {1} songs dated {2}-{3}; window is strict so no relaxing" -f $artist, $windowed.Count, $lo, $hi)
+    }
+    if (-not $cfgStrict -and $windowed.Count -lt 5) {
       $relaxed = @($candidates | Where-Object { $_.year -ge $lo })
       if ($relaxed.Count -gt $windowed.Count) {
         Write-Host ("  {0}: only {1} in {2}-{3} (Apple re-release dating); using {4}+ instead -> {5}" -f $artist, $windowed.Count, $lo, $hi, $lo, $relaxed.Count)
@@ -324,8 +360,9 @@ foreach ($artist in ($byArtist.Keys | Sort-Object)) {
     foreach ($x in $r.genres) { if (-not $g.Contains($x)) { [void]$g.Add($x) } }
 
     # The decade playlists ("שנות התשעים" and friends) are about Israeli
-    # music, so English-language tracks stay out of them.
-    $isEnglish = $g.Contains('hiphopen')
+    # music, so non-Hebrew tracks stay out of them. `lang = en` really means
+    # "not Hebrew" - it is what keeps the default "הכול" pool a Hebrew game.
+    $isEnglish = $g.Contains('hiphopen') -or $g.Contains('metal')
 
     # Decade tag from the earliest year we saw.
     $isClassic = $g.Contains('classic')
