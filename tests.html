@@ -254,6 +254,43 @@ section('היפ הופ עולמי');
   }
 })();
 
+/* ---------------- metal ---------------- */
+section('מטאל');
+(function(){
+  var m = DB.filter(function(s){ return s.genres.indexOf('metal') !== -1; });
+  check('הסגנון מאוכלס', m.length >= 100, true);
+  check('אין שירים בעברית',
+    m.filter(function(s){ return /[א-ת]/.test(s.title); }).length, 0);
+  check('מסומן כלא-עברי',
+    m.filter(function(s){ return s.lang !== 'en'; }).length, 0);
+
+  /* the defining constraint: nothing released after 2016 */
+  check('שום שיר אחרי 2016',
+    m.filter(function(s){ return s.year > 2016; }).length, 0);
+  check('שנים סבירות',
+    m.filter(function(s){ return s.year < 1965 || s.year === 0; }).length, 0);
+
+  check('לא מתערבב בעשורים העבריים',
+    m.filter(function(s){ return ['70s','80s','90s','2000s','2010s','2020s'].some(function(d){ return s.genres.indexOf(d) !== -1; }); }).length, 0);
+
+  var g = new Game(DB); g.setGenre('all');
+  check('"הכול" לא כולל מטאל',
+    g.pool().filter(function(s){ return s.genres.indexOf('metal') !== -1; }).length, 0);
+
+  g.setGenre('metal');
+  check('בחירת מטאל מסננת נכון', g.pool().length === m.length, true);
+
+  /* searchable and guessable like everything else */
+  if (m.length) {
+    check('שיר מטאל נמצא בחיפוש',
+      SongSearch.search(idx, m[0].title, {limit:1}).length > 0, true);
+    check('שיר מטאל מתקבל כניחוש',
+      SongSearch.matchesSong(m[0].title, m[0]), true);
+  }
+  check('חיפוש לפי שם להקה',
+    SongSearch.search(idx, 'Metallica', {limit:1}).length > 0, true);
+})();
+
 /* ---------------- single-artist playlist ---------------- */
 section('קטגוריית אייל גולן');
 (function(){

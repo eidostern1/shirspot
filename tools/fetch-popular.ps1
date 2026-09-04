@@ -15,6 +15,10 @@
 #
 # Resumable: artists already carrying popPass=true are skipped.
 
+# -Genre picks which roster tag to process (default: the English hip hop set).
+# -Only targets specific artists by name.
+param([string]$Genre = 'hiphopen', [string[]]$Only)
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ErrorActionPreference = 'Continue'
 
@@ -58,7 +62,11 @@ function Is-ThisArtist($apiArtist, $entry) {
 }
 
 $utf8 = New-Object Text.UTF8Encoding($false)
-$targets = @($roster | Where-Object { $_.he -and $_.g -contains 'hiphopen' })
+$targets = if ($Only) {
+  @($roster | Where-Object { $_.he -and $Only -contains $_.he })
+} else {
+  @($roster | Where-Object { $_.he -and $_.g -contains $Genre })
+}
 $n = 0
 
 foreach ($a in $targets) {

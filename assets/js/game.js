@@ -29,6 +29,7 @@
     { id: 'hiphop',   he: 'היפ הופ ישראלי' },
     { id: 'classic',  he: 'קלאסיקות' },
     { id: 'hiphopen', he: 'היפ הופ עולמי' },
+    { id: 'metal',    he: 'מטאל' },
     { id: 'eyalgolan', he: 'אייל גולן' }
   ];
 

@@ -15,7 +15,7 @@
 # -Only lets you target specific artists by name, e.g. an artist who has been
 # given a playlist of their own and needs deeper coverage than the roster pass
 # provides:  -Only 'אייל גולן'
-param([string[]]$Only)
+param([string[]]$Only, [string]$Genre = 'hiphopen')
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ErrorActionPreference = 'Continue'
@@ -55,7 +55,7 @@ $utf8 = New-Object Text.UTF8Encoding($false)
 $targets = if ($Only) {
   @($roster | Where-Object { $_.he -and $Only -contains $_.he })
 } else {
-  @($roster | Where-Object { $_.he -and $_.g -contains 'hiphopen' })
+  @($roster | Where-Object { $_.he -and $_.g -contains $Genre })
 }
 $n = 0
 
